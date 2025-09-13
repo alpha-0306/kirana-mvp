@@ -138,6 +138,31 @@ export const DataProvider = ({ children }) => {
     return last7Days;
   };
 
+  const getExpiringItems = () => {
+    const today = new Date();
+    const todayString = today.toDateString();
+    
+    return inventory.filter(item => {
+      if (!item.expiryDate) return false;
+      const expiryDate = new Date(item.expiryDate);
+      return expiryDate.toDateString() === todayString;
+    });
+  };
+
+  const getExpiredItems = () => {
+    const today = new Date();
+    const todayString = today.toDateString();
+    
+    return inventory.filter(item => {
+      if (!item.expiryDate) return false;
+      const expiryDate = new Date(item.expiryDate);
+      const expiryDateString = expiryDate.toDateString();
+      
+      // Only include items that expired BEFORE today (not today)
+      return expiryDateString !== todayString && expiryDate < today;
+    });
+  };
+
   const value = {
     shopData,
     products,
@@ -151,7 +176,9 @@ export const DataProvider = ({ children }) => {
     getTotalSalesToday,
     getTopSellingProduct,
     getLowStockItems,
-    getRevenueData
+    getRevenueData,
+    getExpiringItems,
+    getExpiredItems
   };
 
   return (

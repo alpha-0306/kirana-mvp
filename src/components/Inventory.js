@@ -11,7 +11,8 @@ const Inventory = () => {
     name: '',
     price: '',
     stock: '',
-    reorderThreshold: 5
+    reorderThreshold: 5,
+    image: null
   });
 
   const startEditing = (item) => {
@@ -56,7 +57,7 @@ const Inventory = () => {
         name: newProduct.name,
         price: parseFloat(newProduct.price),
         initialStock: parseInt(newProduct.stock) || 0,
-        image: null
+        image: newProduct.image || null
       }];
       saveProducts(updatedProducts);
       
@@ -77,7 +78,8 @@ const Inventory = () => {
         name: '',
         price: '',
         stock: '',
-        reorderThreshold: 5
+        reorderThreshold: 5,
+        image: null
       });
       setShowAddProduct(false);
     }
@@ -311,6 +313,36 @@ const Inventory = () => {
                 placeholder="5"
                 min="0"
               />
+            </div>
+
+            <div className="form-group">
+              <label>Product Image (Optional)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                      setNewProduct(prev => ({
+                        ...prev,
+                        image: e.target.result
+                      }));
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+              {newProduct.image && (
+                <div style={{ marginTop: '10px' }}>
+                  <img 
+                    src={newProduct.image} 
+                    alt="Preview" 
+                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px' }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex gap-10 mt-20">

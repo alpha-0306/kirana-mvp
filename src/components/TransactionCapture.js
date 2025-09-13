@@ -11,6 +11,7 @@ const TransactionCapture = () => {
   const [currentTransaction, setCurrentTransaction] = useState(null);
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [miscAmount, setMiscAmount] = useState(0);
+  const [miscProducts, setMiscProducts] = useState([]);
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -88,7 +89,58 @@ const TransactionCapture = () => {
     const productTotal = selectedProds
       .filter(p => p.selected)
       .reduce((sum, p) => sum + (p.price * p.quantity), 0);
-    setMiscAmount(Math.max(0, totalAmount - productTotal));
+    
+    const miscAmountValue = Math.max(0, totalAmount - productTotal);
+    setMiscAmount(miscAmountValue);
+    
+    // Track what could be in miscellaneous
+    const miscProductsList = [];
+    
+    if (miscAmountValue > 0) {
+      // Check if any selected products could have additional quantities
+      const selectedProductsWithExtra = selectedProds
+        .filter(p => p.selected && p.quantity > 0)
+        .map(product => {
+          const possibleExtraQuantity = Math.floor(miscAmountValue / product.price);
+          if (possibleExtraQuantity > 0) {
+            return {
+              name: product.name,
+              price: product.price,
+              extraQuantity: possibleExtraQuantity,
+              extraValue: Math.min(possibleExtraQuantity * product.price, miscAmountValue)
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+      
+      // Also check unselected products that could fit in the misc amount
+      const unselectedProducts = selectedProds
+        .filter(p => !p.selected || p.quantity === 0)
+        .map(product => {
+          const possibleQuantity = Math.floor(miscAmountValue / product.price);
+          if (possibleQuantity > 0) {
+            return {
+              name: product.name,
+              price: product.price,
+              extraQuantity: possibleQuantity,
+              extraValue: Math.min(possibleQuantity * product.price, miscAmountValue),
+              isUnselected: true
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+      
+      // Combine and sort by best fit
+      const allPossibleItems = [...selectedProductsWithExtra, ...unselectedProducts]
+        .sort((a, b) => b.extraValue - a.extraValue)
+        .slice(0, 3); // Show top 3 possibilities
+      
+      setMiscProducts(allPossibleItems);
+    } else {
+      setMiscProducts([]);
+    }
   };
 
   const updateProductQuantity = (productId, change) => {
@@ -96,7 +148,49 @@ const TransactionCapture = () => {
       const updated = prev.map(p => {
         if (p.id === productId) {
           const newQuantity = Math.max(0, p.quantity + change);
+          
+          // Check if this change would exceed the transaction amount
+          const tempUpdated = prev.map(tp => 
+            tp.id === productId ? { ...tp, quantity: newQuantity, selected: newQuantity > 0 } : tp
+          );
+          const tempTotal = tempUpdated
+            .filter(tp => tp.selected)
+            .reduce((sum, tp) => sum + (tp.price * tp.quantity), 0);
+          
+          // Don't allow if it exceeds the transaction amount
+          if (tempTotal > currentTransaction.amount) {
+            return p; // Return unchanged
+          }
+          
           return { ...p, quantity: newQuantity, selected: newQuantity > 0 };
+        }
+        return p;
+      });
+      calculateMiscAmount(updated, currentTransaction.amount);
+      return updated;
+    });
+  };
+
+  const setProductQuantityDirect = (productId, newQuantity) => {
+    const quantity = Math.max(0, parseInt(newQuantity) || 0);
+    
+    setSelectedProducts(prev => {
+      const updated = prev.map(p => {
+        if (p.id === productId) {
+          // Check if this change would exceed the transaction amount
+          const tempUpdated = prev.map(tp => 
+            tp.id === productId ? { ...tp, quantity: quantity, selected: quantity > 0 } : tp
+          );
+          const tempTotal = tempUpdated
+            .filter(tp => tp.selected)
+            .reduce((sum, tp) => sum + (tp.price * tp.quantity), 0);
+          
+          // Don't allow if it exceeds the transaction amount
+          if (tempTotal > currentTransaction.amount) {
+            return p; // Return unchanged
+          }
+          
+          return { ...p, quantity: quantity, selected: quantity > 0 };
         }
         return p;
       });
@@ -110,10 +204,26 @@ const TransactionCapture = () => {
       const updated = prev.map(p => {
         if (p.id === productId) {
           const newSelected = !p.selected;
+          const newQuantity = newSelected ? Math.max(1, p.quantity) : 0;
+          
+          // Check if selecting this product would exceed the transaction amount
+          if (newSelected) {
+            const tempUpdated = prev.map(tp => 
+              tp.id === productId ? { ...tp, selected: true, quantity: newQuantity } : tp
+            );
+            const tempTotal = tempUpdated
+              .filter(tp => tp.selected)
+              .reduce((sum, tp) => sum + (tp.price * tp.quantity), 0);
+            
+            if (tempTotal > currentTransaction.amount) {
+              return p; // Return unchanged if it would exceed
+            }
+          }
+          
           return { 
             ...p, 
             selected: newSelected,
-            quantity: newSelected ? Math.max(1, p.quantity) : 0
+            quantity: newQuantity
           };
         }
         return p;
@@ -143,6 +253,7 @@ const TransactionCapture = () => {
     setCurrentTransaction(null);
     setSelectedProducts([]);
     setMiscAmount(0);
+    setMiscProducts([]);
     
     alert('Transaction recorded successfully! 🎉');
   };
@@ -152,6 +263,7 @@ const TransactionCapture = () => {
     setCurrentTransaction(null);
     setSelectedProducts([]);
     setMiscAmount(0);
+    setMiscProducts([]);
   };
 
   // Manual transaction entry
@@ -266,6 +378,30 @@ const TransactionCapture = () => {
 
             <h4 className="mb-20">Select Products Sold:</h4>
             
+            <div className="mb-20">
+              <button
+                onClick={() => {
+                  // Add all products as options for manual selection
+                  const allProductOptions = products.map(p => ({
+                    ...p,
+                    quantity: 0,
+                    selected: false,
+                    confidence: 0.5
+                  }));
+                  
+                  // Merge with existing suggestions, avoiding duplicates
+                  const existingIds = selectedProducts.map(sp => sp.id);
+                  const newProducts = allProductOptions.filter(p => !existingIds.includes(p.id));
+                  
+                  setSelectedProducts(prev => [...prev, ...newProducts]);
+                }}
+                className="btn btn-secondary"
+                style={{ fontSize: '14px', padding: '8px 16px' }}
+              >
+                + Add More Products
+              </button>
+            </div>
+            
             <div className="product-grid">
               {selectedProducts.map(product => (
                 <div 
@@ -295,32 +431,52 @@ const TransactionCapture = () => {
                   <div className="product-price">₹{product.price}</div>
                   
                   {product.selected && (
-                    <div className="flex-center gap-10 mt-10">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateProductQuantity(product.id, -1);
-                        }}
-                        className="btn btn-secondary"
-                        style={{ padding: '4px 8px', fontSize: '12px' }}
-                      >
-                        <Minus size={12} />
-                      </button>
-                      
-                      <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>
-                        {product.quantity}
-                      </span>
-                      
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateProductQuantity(product.id, 1);
-                        }}
-                        className="btn btn-primary"
-                        style={{ padding: '4px 8px', fontSize: '12px' }}
-                      >
-                        <Plus size={12} />
-                      </button>
+                    <div className="mt-10">
+                      <div className="flex-center gap-5 mb-5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateProductQuantity(product.id, -1);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          <Minus size={12} />
+                        </button>
+                        
+                        <input
+                          type="number"
+                          value={product.quantity}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setProductQuantityDirect(product.id, e.target.value);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ 
+                            width: '50px', 
+                            textAlign: 'center', 
+                            padding: '4px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '12px'
+                          }}
+                          min="0"
+                        />
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateProductQuantity(product.id, 1);
+                          }}
+                          className="btn btn-primary"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#666' }}>
+                        Total: ₹{product.price * product.quantity}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -337,9 +493,33 @@ const TransactionCapture = () => {
               </div>
               
               {miscAmount > 0 && (
-                <div className="flex-between text-warning">
-                  <span>Miscellaneous:</span>
-                  <span>₹{miscAmount}</span>
+                <div>
+                  <div className="flex-between text-warning">
+                    <span>Miscellaneous:</span>
+                    <span>₹{miscAmount}</span>
+                  </div>
+                  {miscProducts.length > 0 && (
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#856404', 
+                      marginTop: '5px',
+                      fontStyle: 'italic'
+                    }}>
+                      Possible items: {miscProducts.map(mp => 
+                        `${mp.extraQuantity}x ${mp.name}${mp.isUnselected ? ' (not selected)' : ' (additional)'} (₹${mp.extraValue})`
+                      ).join(', ')}
+                    </div>
+                  )}
+                  {miscProducts.length === 0 && miscAmount > 0 && (
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#856404', 
+                      marginTop: '5px',
+                      fontStyle: 'italic'
+                    }}>
+                      Unaccounted amount - possibly sold-out items, tips, or unlisted products
+                    </div>
+                  )}
                 </div>
               )}
               

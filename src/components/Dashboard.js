@@ -10,6 +10,8 @@ const Dashboard = () => {
     getTopSellingProduct,
     getLowStockItems,
     getRevenueData,
+    getExpiringItems,
+    getExpiredItems,
     shopData
   } = useData();
 
@@ -17,6 +19,8 @@ const Dashboard = () => {
   const topProduct = getTopSellingProduct();
   const lowStockItems = getLowStockItems();
   const revenueData = getRevenueData();
+  const expiringItems = getExpiringItems();
+  const expiredItems = getExpiredItems();
 
   return (
     <div>
@@ -56,9 +60,18 @@ const Dashboard = () => {
           <div className="stat-value">{lowStockItems.length}</div>
           <div className="stat-label">Low Stock Alerts</div>
         </div>
+
+        <div className="stat-card" style={{ 
+          background: (expiringItems.length > 0 || expiredItems.length > 0)
+            ? 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' 
+            : 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' 
+        }}>
+          <div className="stat-value">{expiringItems.length + expiredItems.length}</div>
+          <div className="stat-label">Expiry Alerts</div>
+        </div>
       </div>
 
-      <div className="grid grid-2">
+      <div className="grid grid-3">
         {/* Revenue Chart */}
         <div className="card">
           <h3 className="mb-20">
@@ -118,6 +131,66 @@ const Dashboard = () => {
               
               <Link to="/inventory" className="btn btn-primary" style={{ width: '100%', marginTop: '15px' }}>
                 Manage Inventory
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Expiry Alerts */}
+        <div className="card">
+          <h3 className="mb-20">
+            ⏰ Expiry Alerts
+          </h3>
+          
+          {expiringItems.length === 0 && expiredItems.length === 0 ? (
+            <div className="text-center" style={{ padding: '40px', color: '#666' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+              <p>No expiry concerns!</p>
+            </div>
+          ) : (
+            <div>
+              {expiredItems.map(item => (
+                <div key={`expired-${item.id}`} className="flex-between" style={{ 
+                  padding: '12px', 
+                  backgroundColor: '#f8d7da', 
+                  borderRadius: '8px', 
+                  marginBottom: '10px',
+                  border: '1px solid #f5c6cb'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: '600' }}>{item.name}</div>
+                    <div style={{ fontSize: '14px', color: '#721c24' }}>
+                      Expired: {new Date(item.expiryDate).toLocaleDateString('en-IN')}
+                    </div>
+                  </div>
+                  <div style={{ color: '#dc3545', fontWeight: '600' }}>
+                    EXPIRED
+                  </div>
+                </div>
+              ))}
+
+              {expiringItems.map(item => (
+                <div key={`expiring-${item.id}`} className="flex-between" style={{ 
+                  padding: '12px', 
+                  backgroundColor: '#fff3cd', 
+                  borderRadius: '8px', 
+                  marginBottom: '10px',
+                  border: '1px solid #ffeaa7'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: '600' }}>{item.name}</div>
+                    <div style={{ fontSize: '14px', color: '#856404' }}>
+                      Expires today!
+                    </div>
+                  </div>
+                  <div style={{ color: '#ffc107', fontWeight: '600' }}>
+                    TODAY
+                  </div>
+                </div>
+              ))}
+              
+              <Link to="/inventory" className="btn btn-primary" style={{ width: '100%', marginTop: '15px' }}>
+                Manage Expiry Dates
               </Link>
             </div>
           )}

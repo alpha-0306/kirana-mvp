@@ -122,36 +122,111 @@ class GeminiService {
   }
 
   fallbackProductSuggestion(amount, products) {
-    // Simple fallback logic
+    const suggestions = [];
+    
+    // 1. Exact price match
     const exactMatch = products.find(p => p.price === amount);
     if (exactMatch) {
-      return [{
+      suggestions.push([{
         id: exactMatch.id,
         name: exactMatch.name,
         price: exactMatch.price,
         quantity: 1,
-        confidence: 0.9
-      }];
+        confidence: 0.95
+      }]);
     }
 
-    // Find combinations that sum close to the amount
-    const suggestions = [];
+    // 2. Single product with exact quantity
     for (const product of products) {
-      if (product.price <= amount) {
-        const quantity = Math.floor(amount / product.price);
-        if (quantity > 0) {
-          suggestions.push({
+      if (product.price > 0 && amount % product.price === 0) {
+        const quantity = amount / product.price;
+        if (quantity > 0 && quantity <= 10) { // Reasonable quantity limit
+          suggestions.push([{
             id: product.id,
             name: product.name,
             price: product.price,
             quantity: quantity,
-            confidence: 0.7
-          });
+            confidence: 0.9
+          }]);
         }
       }
     }
 
-    return suggestions.slice(0, 3); // Return top 3 suggestions
+    // 3. Two-product combinations that sum exactly to amount
+    for (let i = 0; i < products.length; i++) {
+      for (let j = i + 1; j < products.length; j++) {
+        const product1 = products[i];
+        const product2 = products[j];
+        
+        // Try different quantity combinations
+        for (let q1 = 1; q1 <= 5; q1++) {
+          for (let q2 = 1; q2 <= 5; q2++) {
+            const total = (product1.price * q1) + (product2.price * q2);
+            if (total === amount) {
+              suggestions.push([
+                {
+                  id: product1.id,
+                  name: product1.name,
+                  price: product1.price,
+                  quantity: q1,
+                  confidence: 0.8
+                },
+                {
+                  id: product2.id,
+                  name: product2.name,
+                  price: product2.price,
+                  quantity: q2,
+                  confidence: 0.8
+                }
+              ]);
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Best single product fit (closest without exceeding)
+    const sortedProducts = products
+      .filter(p => p.price <= amount)
+      .sort((a, b) => b.price - a.price);
+    
+    if (sortedProducts.length > 0) {
+      const bestProduct = sortedProducts[0];
+      const maxQuantity = Math.floor(amount / bestProduct.price);
+      if (maxQuantity > 0) {
+        suggestions.push([{
+          id: bestProduct.id,
+          name: bestProduct.name,
+          price: bestProduct.price,
+          quantity: maxQuantity,
+          confidence: 0.6
+        }]);
+      }
+    }
+
+    // Remove duplicates and return top 5 combinations
+    const uniqueSuggestions = suggestions
+      .filter((combo, index, self) => {
+        const comboKey = combo.map(p => `${p.id}-${p.quantity}`).sort().join('|');
+        return index === self.findIndex(c => 
+          c.map(p => `${p.id}-${p.quantity}`).sort().join('|') === comboKey
+        );
+      })
+      .sort((a, b) => {
+        const aTotal = a.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+        const bTotal = b.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+        const aConfidence = a.reduce((sum, p) => sum + p.confidence, 0) / a.length;
+        const bConfidence = b.reduce((sum, p) => sum + p.confidence, 0) / b.length;
+        
+        // Prefer exact matches, then by confidence
+        if (aTotal === amount && bTotal !== amount) return -1;
+        if (bTotal === amount && aTotal !== amount) return 1;
+        return bConfidence - aConfidence;
+      })
+      .slice(0, 5);
+
+    // Flatten the first suggestion as default, keep others as alternatives
+    return uniqueSuggestions.length > 0 ? uniqueSuggestions[0] : [];
   }
 
   async chatWithAssistant(message, context) {
