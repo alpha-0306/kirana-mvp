@@ -192,15 +192,6 @@ This is a hackathon MVP. For improvements:
 
 MIT License - feel free to use this for your hackathon or commercial projects!
 
-## 🎉 Demo Data
-
-The app includes sample data for testing:
-- Mock UPI transactions
-- Sample product suggestions
-- Demo chat responses
-
-Perfect for hackathon demos and development!
-
 ---
 
 **Built with ❤️ for Indian Shopkeepers**
